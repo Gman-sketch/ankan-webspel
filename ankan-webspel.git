@@ -1,0 +1,274 @@
+import pygame
+import random
+import sys
+import math
+
+pygame.init()
+
+# Skärm
+WIDTH, HEIGHT = 700, 450
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Ankan & Regnbågsshoppen")
+
+# Färger
+WHITE = (255, 255, 255)
+GRAY = (200, 200, 200)
+BLACK = (0, 0, 0)
+BLUE = (0, 0, 255)
+ORANGE = (255, 165, 0)
+
+# Skins med pris
+SKIN_COLORS = {
+    "Röd": ((255, 0, 0), 1),
+    "Orange": ((255, 165, 0), 2),
+    "Gul": ((255, 255, 0), 1),
+    "Grön": ((0, 255, 0), 2),
+    "Blå": ((0, 0, 255), 3),
+    "Indigo": ((75, 0, 130), 3),
+    "Violett": ((148, 0, 211), 4),
+    "Silver": ((192, 192, 192), 5),
+    "Brons": ((205, 127, 50), 4),
+    "Guld": ((255, 215, 0), 6)
+}
+
+# Anka
+animal_size = 30
+animal_x = WIDTH // 2
+animal_y = HEIGHT - animal_size - 20
+animal_speed = 5
+animal_color = SKIN_COLORS["Gul"][0]
+owned_colors = {"Gul": True}
+
+# Bussar
+bus_width = 100
+bus_height = 40
+buses = []
+
+# Fyrverkerier
+fireworks = []
+
+# Poäng och valuta
+score = 0
+diamonds = 0
+font = pygame.font.SysFont(None, 32)
+big_font = pygame.font.SysFont(None, 60)
+
+# Säker zoner
+safe_zone_middle_y = HEIGHT // 2 - 20
+safe_zone_middle_height = 40
+safe_zone_bottom = HEIGHT - 60
+
+# Spelstatus
+won = False
+win_timer = 0
+in_shop = False
+
+# Funktioner
+def random_color():
+    return (random.randint(50, 255), random.randint(50, 255), random.randint(50, 255))
+
+def create_bus():
+    y_choices = list(range(60, safe_zone_middle_y - bus_height)) + list(range(safe_zone_middle_y + safe_zone_middle_height + 10, safe_zone_bottom - bus_height))
+    y = random.choice(y_choices)
+    speed = random.choice([random.randint(4, 6), random.randint(10, 15)])
+    color = random_color()
+    x_offset = random.randint(0, 200)
+    buses.append({"x": WIDTH + x_offset, "y": y, "speed": speed, "color": color})
+
+def create_firework():
+    x = random.randint(0, WIDTH)
+    y = random.randint(0, HEIGHT // 2)
+    color = random_color()
+    particles = []
+    for _ in range(20):
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(2, 5)
+        dx = math.cos(angle) * speed
+        dy = math.sin(angle) * speed
+        particles.append({"x": x, "y": y, "dx": dx, "dy": dy, "color": color, "timer": 30})
+    fireworks.append(particles)
+
+def draw_bus(bus):
+    pygame.draw.rect(screen, bus["color"], (bus["x"], bus["y"], bus_width, bus_height))
+    for i in range(3):
+        pygame.draw.rect(screen, WHITE, (bus["x"] + 10 + i*30, bus["y"] + 10, 20, 15))
+    pygame.draw.circle(screen, BLACK, (bus["x"] + 20, bus["y"] + bus_height), 6)
+    pygame.draw.circle(screen, BLACK, (bus["x"] + 80, bus["y"] + bus_height), 6)
+
+def draw_duck(x, y, color):
+    pygame.draw.circle(screen, color, (x + 15, y + 15), 15)
+    pygame.draw.circle(screen, color, (x + 25, y + 10), 10)
+    pygame.draw.circle(screen, BLACK, (x + 28, y + 8), 2)
+    pygame.draw.rect(screen, ORANGE, (x + 30, y + 12, 10, 5))
+def draw_shop():
+    screen.fill((240, 220, 255))
+    title = big_font.render("Regnbågsshoppen", True, BLACK)
+    screen.blit(title, (WIDTH // 2 - 150, 30))
+    y_offset = 100
+    for i, (name, (color, cost)) in enumerate(SKIN_COLORS.items()):
+        pygame.draw.rect(screen, color, (80 + i*60, y_offset, 40, 40))
+        label = font.render(name, True, BLACK)
+        screen.blit(label, (80 + i*60, y_offset + 45))
+        price = font.render(f"{cost}💎", True, BLACK)
+        screen.blit(price, (80 + i*60, y_offset + 65))
+        if owned_colors.get(name):
+            owned = font.render("Ägd", True, BLUE)
+            screen.blit(owned, (80 + i*60, y_offset + 85))
+    back = font.render("Tillbaka", True, BLUE)
+    screen.blit(back, (10, HEIGHT - 40))
+
+def handle_shop_click(pos):
+    global animal_color, diamonds, in_shop
+    y_offset = 100
+    for i, (name, (color, cost)) in enumerate(SKIN_COLORS.items()):
+        rect = pygame.Rect(80 + i*60, y_offset, 40, 40)
+        if rect.collidepoint(pos):
+            if owned_colors.get(name):
+                animal_color = color
+            elif diamonds >= cost:
+                diamonds -= cost
+                owned_colors[name] = True
+                animal_color = color
+    if pygame.Rect(10, HEIGHT - 40, 100, 30).collidepoint(pos):
+        in_shop = False
+        
+def draw_inventory():
+    global inventory_rects
+    inventory_rects = []
+    pygame.draw.rect(screen, (180, 180, 220), (0, HEIGHT - 100, 220, 100))
+    title = font.render("🎒 Ryggsäck", True, BLACK)
+    screen.blit(title, (10, HEIGHT - 95))
+    x_offset = 10
+    y_offset = HEIGHT - 60
+    for name, (color, _) in SKIN_COLORS.items():
+        if owned_colors.get(name):
+            rect = pygame.Rect(x_offset, y_offset, 30, 30)
+            pygame.draw.rect(screen, color, rect)
+            pygame.draw.rect(screen, BLACK, rect, 2)
+            if color == animal_color:
+                pygame.draw.rect(screen, BLUE, rect, 3)  # Markera vald färg
+            inventory_rects.append((rect, color))
+            x_offset += 35
+inventory_rects = []  # För att hålla koll på klickbara färgrutor
+# Spelloop
+clock = pygame.time.Clock()
+running = True
+
+while running:
+    screen.fill(GRAY)
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if event.type == pygame.MOUSEBUTTONDOWN and in_shop:
+            handle_shop_click(event.pos)
+        if event.type == pygame.KEYDOWN and not in_shop:
+            if event.key == pygame.K_e:
+                in_shop = True
+
+        if event.type == pygame.MOUSEBUTTONDOWN and not in_shop:
+            for rect, color in inventory_rects:
+                if rect.collidepoint(event.pos):
+                    animal_color = color
+        
+        
+        
+       # if event.type == pygame.KEYDOWN and not in_shop:
+        #    if event.key == pygame.K_e:
+         #       in_shop = True
+          #      if event.type == pygame.MOUSEBUTTONDOWN and not in_shop:
+           #       for rect, color in inventory_rects:
+            #        if  event.key == pygame.k_e:
+             #           in_shop =true
+                
+              #      animal_color = color
+
+    if in_shop:
+        draw_shop()
+        diamond_text = font.render(f"💎: {diamonds}", True, BLACK)
+        screen.blit(diamond_text, (WIDTH - 100, 10))
+        pygame.display.flip()
+        clock.tick(30)
+        continue
+
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_w]:
+        animal_y -= animal_speed
+    if keys[pygame.K_s]:
+        animal_y += animal_speed
+    if keys[pygame.K_a]:
+        animal_x -= animal_speed
+    if keys[pygame.K_d]:
+        animal_x += animal_speed
+
+    animal_y = max(0, min(animal_y, HEIGHT - animal_size - 20))
+    animal_x = max(0, min(animal_x, WIDTH - animal_size))
+
+    pygame.draw.rect(screen, WHITE, (0, safe_zone_middle_y, WIDTH, safe_zone_middle_height))
+    pygame.draw.rect(screen, WHITE, (0, safe_zone_bottom, WIDTH, HEIGHT - safe_zone_bottom))
+
+    if random.randint(1, 10) == 1 and len(buses) < 10:
+        create_bus()
+
+    for bus in buses:
+        bus["x"] -= bus["speed"]
+        draw_bus(bus)
+
+    draw_duck(animal_x, animal_y, animal_color)
+    draw_inventory()
+
+    for bus in buses:
+        if (animal_x < bus["x"] + bus_width and
+            animal_x + animal_size > bus["x"] and
+            animal_y < bus["y"] + bus_height and
+            animal_y + animal_size > bus["y"]):
+            score = 0
+            animal_x = WIDTH // 2
+            animal_y = HEIGHT - animal_size - 20
+            buses.clear()
+
+    if animal_y < 10 and not won:
+        score += 1
+        animal_x = WIDTH // 2
+        animal_y = HEIGHT - animal_size - 20
+        buses.clear()
+
+    score_text = font.render(f"Poäng: {score}", True, BLUE)
+    screen.blit(score_text, (10, 10))
+    diamond_text = font.render(f"💎: {diamonds}", True, BLACK)
+    screen.blit(diamond_text, (WIDTH - 100, 10))
+    shop_button = font.render("Shop (E)", True, BLUE)
+    screen.blit(shop_button, (WIDTH - 150, HEIGHT - 40))
+
+    if score >= 2 and not won:
+        won = True
+        win_timer = 90
+        diamonds += 2
+        for _ in range(5):
+            create_firework()
+
+    if won:
+        for particles in fireworks:
+            for p in particles:
+                p["x"] += p["dx"]
+                p["y"] += p["dy"]
+                p["timer"] -= 1
+                pygame.draw.circle(screen, p["color"], (int(p["x"]), int(p["y"])), 3)
+        fireworks = [[p for p in group if p["timer"] > 0] for group in fireworks]
+        fireworks = [group for group in fireworks if group]
+
+        win_text = big_font.render("Bra jobbat!", True, BLUE)
+        screen.blit(win_text, (WIDTH // 2 - 130, HEIGHT // 2 - 30))
+
+        win_timer -= 1
+        if win_timer <= 0:
+            score = 0
+            animal_x = WIDTH // 2
+            animal_y = HEIGHT - animal_size - 20
+            buses.clear()
+            fireworks.clear()
+            won = False
+
+    pygame.display.flip()
+    clock.tick(30)
